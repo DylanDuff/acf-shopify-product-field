@@ -89,22 +89,20 @@
 		$search.on('input', function () {
 			var term = $(this).val();
 			clearTimeout(searchTimer);
-			if (term.length < 1) {
-				$results.empty();
-				return;
-			}
 			searchTimer = setTimeout(function () {
 				runSearch(term);
 			}, 300);
 		});
 
 		$collectionFilter.on('change', function () {
-			var term = $search.val();
 			clearTimeout(searchTimer);
-			if (term.length >= 1) {
-				runSearch(term);
-			}
+			runSearch($search.val());
 		});
+
+		// Shopify's product search returns its default listing for an empty
+		// term, so use that to pre-populate results instead of leaving the
+		// panel blank until the editor types something.
+		runSearch('');
 
 		$results.on('click', '> li', function () {
 			if (isAtMax()) {

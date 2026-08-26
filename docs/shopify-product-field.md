@@ -144,6 +144,12 @@ full shape for one of the selected products.
 
 - Same "hook ACF's JS field API, not raw DOM ready" requirement as the single
   field, via `ready_field/type=shopify_products` / `append_field/...`.
+- The results panel runs a search with an empty term on init to pre-populate
+  it with Shopify's default product listing (or the collection's, if scoped),
+  rather than leaving it blank until the editor types something — the same
+  `aspf_search_products` AJAX call handles an empty `term` fine. This is one
+  more Storefront API call per field instance per page load, on top of the
+  label-lookup call for already-selected products.
 - The already-selected items' labels on render use
   `aspf_get_cached_products_summary()`, which batches all missing GIDs into
   one `get_products()` call (request-memoized) rather than looking up each
