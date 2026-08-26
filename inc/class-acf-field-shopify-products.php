@@ -73,22 +73,24 @@ if (!class_exists('acf_field_shopify_products')) :
 						$is_locked_to_collection = !empty($field['collection_gid']);
 						$collections = $is_locked_to_collection ? array() : aspf_get_cached_collections();
 						?>
-						<?php if (!empty($collections)) : ?>
-							<select class="aspf-collection-filter">
-								<option value=""><?php esc_html_e('All Collections', 'acf-shopify-product-field'); ?></option>
-								<?php foreach ($collections as $collection) : ?>
-									<option value="<?php echo esc_attr($collection['gid']); ?>"><?php echo esc_html($collection['title']); ?></option>
-								<?php endforeach; ?>
-							</select>
-						<?php endif; ?>
-						<input
-							type="text"
-							class="aspf-products-search"
-							placeholder="<?php echo esc_attr($placeholder); ?>"
-							data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>"
-							data-nonce="<?php echo esc_attr(wp_create_nonce('aspf_search_products')); ?>"
-							data-collection-gid="<?php echo esc_attr($field['collection_gid']); ?>"
-						/>
+						<div class="aspf-products-search-row">
+							<input
+								type="text"
+								class="aspf-products-search"
+								placeholder="<?php echo esc_attr($placeholder); ?>"
+								data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>"
+								data-nonce="<?php echo esc_attr(wp_create_nonce('aspf_search_products')); ?>"
+								data-collection-gid="<?php echo esc_attr($field['collection_gid']); ?>"
+							/>
+							<?php if (!empty($collections)) : ?>
+								<select class="aspf-collection-filter">
+									<option value=""><?php esc_html_e('All Collections', 'acf-shopify-product-field'); ?></option>
+									<?php foreach ($collections as $collection) : ?>
+										<option value="<?php echo esc_attr($collection['gid']); ?>"><?php echo esc_html($collection['title']); ?></option>
+									<?php endforeach; ?>
+								</select>
+							<?php endif; ?>
+						</div>
 						<ul class="aspf-products-results"></ul>
 					</div>
 					<div class="aspf-relationship-right">

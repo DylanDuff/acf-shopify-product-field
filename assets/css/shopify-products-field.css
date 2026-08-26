@@ -17,16 +17,22 @@
 	border-right: 1px solid #dcdcde;
 }
 
-.aspf-collection-filter {
-	width: 100%;
-	box-sizing: border-box;
-	margin-bottom: 6px;
+.aspf-products-search-row {
+	display: flex;
+	gap: 6px;
+	margin-bottom: 8px;
 }
 
 .aspf-products-search {
-	width: 100%;
+	flex: 1 1 auto;
+	min-width: 0;
 	box-sizing: border-box;
-	margin-bottom: 8px;
+}
+
+.aspf-collection-filter {
+	flex: 0 0 auto;
+	max-width: 40%;
+	box-sizing: border-box;
 }
 
 .aspf-products-results,
