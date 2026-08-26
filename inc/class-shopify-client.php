@@ -90,7 +90,11 @@ query SearchProducts($query: String!, $first: Int!) {
 GRAPHQL;
 
 		$search_term = trim((string) $search_term);
-		$shopify_query = $search_term === '' ? '' : sprintf('title:*%s*', $search_term);
+		// Shopify's product search treats a literal empty string as "match
+		// nothing", but a whitespace-only query as "no filter" (matches
+		// everything) -- so a blank search term is sent as a single space,
+		// not "", to get the default product listing instead of zero results.
+		$shopify_query = $search_term === '' ? ' ' : sprintf('title:*%s*', $search_term);
 
 		$data = $this->request($query, array(
 			'query' => $shopify_query,
