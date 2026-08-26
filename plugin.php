@@ -3,7 +3,7 @@
  * Plugin Name: ACF Shopify Product Field
  * Plugin URI: https://github.com/DylanDuff/acf-shopify-product-field
  * Description: Adds an ACF field type that searches Shopify products via the Storefront API and stores the selected product's GID. Includes a helper to resolve stored GIDs back into live product data.
- * Version: 0.1.0
+ * Version: 0.2.0
  * Requires PHP: 7.4
  * Author: Dylan Duff
  * License: GPL-2.0-or-later
@@ -58,4 +58,7 @@ function aspf_missing_acf_notice() {
 function aspf_include_field_type() {
 	require_once ASPF_PLUGIN_DIR . 'inc/class-acf-field-shopify-product.php';
 	acf_register_field_type('acf_field_shopify_product');
+
+	require_once ASPF_PLUGIN_DIR . 'inc/class-acf-field-shopify-products.php';
+	acf_register_field_type('acf_field_shopify_products');
 }

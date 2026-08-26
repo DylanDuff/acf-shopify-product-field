@@ -1,17 +1,9 @@
-# Shopify Product Field
+# Shopify Product Field(s)
 
-Reference for the `acf_field_shopify_product` field type (`inc/class-acf-field-shopify-product.php`).
+Reference for the two ACF field types this plugin registers: `shopify_product`
+(single) and `shopify_products` (multiple, relationship-style).
 
-## What it does
-
-Registers an ACF field of type `shopify_product`. In the field editor UI it renders
-as a Select2 search box (`assets/js/shopify-product-field.js`) that queries the
-Shopify Storefront API by product title via `wp_ajax_aspf_search_products`
-(`inc/class-ajax-handlers.php`). Selecting a result stores the product's GID
-(e.g. `gid://shopify/Product/1234567890`) as the raw field value — nothing else
-is persisted in postmeta.
-
-## Credentials
+## Credentials (shared by both field types)
 
 Shop domain and Storefront API access token are configured once, globally, under
 **Settings → Shopify Product Field** (`inc/class-plugin-settings.php`), stored in
@@ -22,7 +14,20 @@ The Storefront API token only needs `unauthenticated_read_product_listings` scop
 Storefront tokens are meant for public/unauthenticated reads, so storing it in
 `wp_options` carries the same trust level as embedding it in a theme.
 
-## Resolving a stored GID back to product data
+## `shopify_product` — single product
+
+`inc/class-acf-field-shopify-product.php`.
+
+### What it does
+
+Registers an ACF field of type `shopify_product`. In the field editor UI it renders
+as a Select2 search box (`assets/js/shopify-product-field.js`) that queries the
+Shopify Storefront API by product title via `wp_ajax_aspf_search_products`
+(`inc/class-ajax-handlers.php`). Selecting a result stores the product's GID
+(e.g. `gid://shopify/Product/1234567890`) as the raw field value — nothing else
+is persisted in postmeta.
+
+### Resolving a stored GID back to product data
 
 ```php
 // Full product data (title, images, price range, variants, ...)
@@ -46,22 +51,7 @@ which is a live Storefront API GraphQL call on every invocation — there is no
 caching layer. If a template calls this on every page load, consider wrapping it
 in a transient.
 
-## GraphQL shape
-
-`ASPF_Shopify_Client::search_products()` queries `products(query, first)` filtered
-with a `title:*term*` Storefront search string, returning `{ gid, title, handle, image }`
-per result (capped at 50).
-
-`ASPF_Shopify_Client::get_product()` queries a single `product(id: $gid)` and returns
-title, handle, description/descriptionHtml, vendor, productType, tags,
-availableForSale, onlineStoreUrl, featuredImage, up to 10 images, min/max price
-range, and up to 50 variants (with price, availability, and selected options).
-
-Extend the GraphQL query strings in `class-shopify-client.php` directly if a
-template needs fields not currently fetched (e.g. metafields) — there's no
-filter hook for the query shape yet.
-
-## Admin UI notes
+### Admin UI notes
 
 - The field's Select2 is initialized via ACF's JS field API
   (`acf.addAction('ready_field/type=shopify_product', ...)` and
@@ -71,3 +61,83 @@ filter hook for the query shape yet.
   (`aspf_get_cached_product_label()`), which makes one Storefront API call per
   distinct GID per page load (memoized within the request). A post edit screen
   with many rows of this field will make that many API calls when the page renders.
+
+## `shopify_products` — multiple products
+
+`inc/class-acf-field-shopify-products.php`.
+
+### What it does
+
+Registers an ACF field of type `shopify_products`, modeled on ACF's own
+Relationship field: a search panel on the left (same AJAX search endpoint as
+the single field, `aspf_search_products`, but passing `exclude[]` for the
+already-selected GIDs so they drop out of further results), and a sortable
+list of selected products on the right
+(`assets/js/shopify-products-field.js`, using `jquery-ui-sortable`). Field
+settings: **Placeholder Text** and **Maximum Products** (0 = unlimited).
+
+### Storage
+
+The value is a plain ordered PHP array of GID strings (drag order = stored
+order), e.g. `['gid://shopify/Product/1', 'gid://shopify/Product/2']`. It's
+submitted the same way ACF's own checkbox/relationship fields are: a base
+`name="{$field_name}"` hidden input with an empty value (so deselecting
+everything still submits something), followed by one
+`name="{$field_name}[]"` hidden input per selected item, in DOM order. No
+custom `load_value`/`update_value`/`format_value` overrides — WP's default
+postmeta serialization handles the array.
+
+### Resolving stored GIDs back to product data
+
+```php
+$products = aspf_get_products_field('linked_products'); // current post, by field name
+// => [ ['gid' => ..., 'title' => ..., 'handle' => ..., 'image' => ...], ... ] in stored order
+
+foreach ($products as $product) {
+    echo esc_html($product['title']);
+}
+
+// Or resolve an arbitrary list of GIDs directly:
+$products = aspf_get_products(['gid://shopify/Product/1', 'gid://shopify/Product/2']);
+```
+
+`aspf_get_products()` calls `ASPF_Shopify_Client::get_products()`, which uses
+Shopify's `nodes(ids: [ID!])` query to fetch all of them in a single
+Storefront API request (not one call per GID). It returns lightweight
+summaries only (gid, title, handle, image) — not the full product shape
+`get_product()`/`aspf_get_product()` returns (no variants, price range,
+description, etc.). Call `aspf_get_product($gid)` per item if you need the
+full shape for one of the selected products.
+
+### Admin UI notes
+
+- Same "hook ACF's JS field API, not raw DOM ready" requirement as the single
+  field, via `ready_field/type=shopify_products` / `append_field/...`.
+- The already-selected items' labels on render use
+  `aspf_get_cached_products_summary()`, which batches all missing GIDs into
+  one `get_products()` call (request-memoized) rather than looking up each
+  GID individually — this is the main practical difference from the single
+  field's per-GID `aspf_get_cached_product_label()`.
+- If a stored GID can't be resolved (e.g. the product was deleted in
+  Shopify), the admin UI falls back to displaying the raw GID as the label
+  rather than silently dropping the item — the value isn't cleaned up by
+  loading the field.
+
+## GraphQL shape
+
+`ASPF_Shopify_Client::search_products()` queries `products(query, first)` filtered
+with a `title:*term*` Storefront search string, returning `{ gid, title, handle, image }`
+per result (capped at 50).
+
+`ASPF_Shopify_Client::get_products()` queries `nodes(ids: [ID!])` and returns the
+same lightweight `{ gid, title, handle, image }` shape per GID, in the order requested
+(missing/deleted/non-Product ids are silently dropped).
+
+`ASPF_Shopify_Client::get_product()` queries a single `product(id: $gid)` and returns
+title, handle, description/descriptionHtml, vendor, productType, tags,
+availableForSale, onlineStoreUrl, featuredImage, up to 10 images, min/max price
+range, and up to 50 variants (with price, availability, and selected options).
+
+Extend the GraphQL query strings in `class-shopify-client.php` directly if a
+template needs fields not currently fetched (e.g. metafields) — there's no
+filter hook for the query shape yet.

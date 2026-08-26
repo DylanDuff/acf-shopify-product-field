@@ -27,6 +27,7 @@ class ASPF_Ajax_Handlers {
 		}
 
 		$search_term = isset($_GET['term']) ? sanitize_text_field(wp_unslash($_GET['term'])) : '';
+		$exclude = isset($_GET['exclude']) ? array_map('sanitize_text_field', (array) wp_unslash($_GET['exclude'])) : array();
 
 		$client = ASPF_Shopify_Client::from_settings();
 		if (is_wp_error($client)) {
@@ -36,6 +37,12 @@ class ASPF_Ajax_Handlers {
 		$results = $client->search_products($search_term);
 		if (is_wp_error($results)) {
 			wp_send_json_error(array('message' => $results->get_error_message()), 502);
+		}
+
+		if (!empty($exclude)) {
+			$results = array_values(array_filter($results, function ($product) use ($exclude) {
+				return !in_array($product['gid'], $exclude, true);
+			}));
 		}
 
 		wp_send_json_success(array('results' => $results));

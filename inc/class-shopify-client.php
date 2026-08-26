@@ -116,6 +116,61 @@ GRAPHQL;
 	}
 
 	/**
+	 * Bulk-fetch lightweight summaries (gid, title, handle, image) for a list of
+	 * GIDs in a single request, preserving the order of $gids. Used by the
+	 * multi-select "Shopify Products" field to label already-selected items
+	 * without one API call per product.
+	 */
+	public function get_products($gids) {
+		$gids = array_values(array_unique(array_filter((array) $gids)));
+		if (empty($gids)) {
+			return array();
+		}
+
+		$query = <<<'GRAPHQL'
+query GetProducts($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    id
+    ... on Product {
+      title
+      handle
+      featuredImage {
+        url(transform: { maxWidth: 64, maxHeight: 64 })
+      }
+    }
+  }
+}
+GRAPHQL;
+
+		$data = $this->request($query, array('ids' => $gids));
+		if (is_wp_error($data)) {
+			return $data;
+		}
+
+		$by_id = array();
+		foreach ($data['nodes'] ?? array() as $node) {
+			if (empty($node) || !isset($node['title'])) {
+				continue;
+			}
+			$by_id[$node['id']] = array(
+				'gid' => $node['id'],
+				'title' => $node['title'],
+				'handle' => $node['handle'] ?? '',
+				'image' => $node['featuredImage']['url'] ?? '',
+			);
+		}
+
+		$ordered = array();
+		foreach ($gids as $gid) {
+			if (isset($by_id[$gid])) {
+				$ordered[] = $by_id[$gid];
+			}
+		}
+
+		return $ordered;
+	}
+
+	/**
 	 * Fetch full product data for a stored GID, e.g. gid://shopify/Product/1234567890.
 	 */
 	public function get_product($gid) {
