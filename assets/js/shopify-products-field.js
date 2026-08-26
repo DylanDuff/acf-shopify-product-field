@@ -68,6 +68,7 @@
 					nonce: $search.data('nonce'),
 					term: term,
 					exclude: currentGids($values),
+					collection: $search.data('collection-gid') || '',
 				},
 			}).done(function (response) {
 				$results.empty();

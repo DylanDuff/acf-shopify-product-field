@@ -61,6 +61,31 @@ function aspf_get_cached_product_label($gid) {
 }
 
 /**
+ * Memoized collection list, used to populate the "Restrict to Collection"
+ * field setting choices in the field group editor. Returns an empty array
+ * (rather than a WP_Error) on failure so the setting just renders with no
+ * choices instead of breaking the field group editor.
+ */
+function aspf_get_cached_collections() {
+	static $collections = null;
+
+	if ($collections !== null) {
+		return $collections;
+	}
+
+	$client = ASPF_Shopify_Client::from_settings();
+	if (is_wp_error($client)) {
+		$collections = array();
+		return $collections;
+	}
+
+	$result = $client->get_collections();
+	$collections = is_wp_error($result) ? array() : $result;
+
+	return $collections;
+}
+
+/**
  * Bulk-resolve GIDs (as stored by the ACF Shopify Products field) into
  * lightweight product summaries (gid, title, handle, image) in one
  * Storefront API call.

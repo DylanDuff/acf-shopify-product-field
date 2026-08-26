@@ -74,7 +74,24 @@ the single field, `aspf_search_products`, but passing `exclude[]` for the
 already-selected GIDs so they drop out of further results), and a sortable
 list of selected products on the right
 (`assets/js/shopify-products-field.js`, using `jquery-ui-sortable`). Field
-settings: **Placeholder Text** and **Maximum Products** (0 = unlimited).
+settings: **Placeholder Text**, **Maximum Products** (0 = unlimited), and
+**Restrict to Collection**.
+
+**Restrict to Collection** locks the field instance's search to one Shopify
+collection, chosen from a `<select>` populated at field-settings-render time
+via `aspf_get_cached_collections()` → `ASPF_Shopify_Client::get_collections()`
+(a live Storefront API call — same trade-off as the settings page needing
+credentials configured first; if they aren't, the choices list is just empty
+and the setting shows only "— All products —"). When set, search requests
+pass the collection GID to `wp_ajax_aspf_search_products`, which routes to
+`ASPF_Shopify_Client::search_products_in_collection()` instead of the
+top-level `search_products()`. That method fetches up to 250 products from
+the collection and filters by title in PHP, because the Storefront API's
+`Collection.products` connection has no title-search argument the way the
+top-level `products(query:)` field does — **collections larger than 250
+products only search their first page**. Revisit this if a store has larger
+collections; the fix would be cursor-paginating through `Collection.products`
+server-side, which isn't implemented.
 
 ### Storage
 
@@ -132,6 +149,13 @@ per result (capped at 50).
 `ASPF_Shopify_Client::get_products()` queries `nodes(ids: [ID!])` and returns the
 same lightweight `{ gid, title, handle, image }` shape per GID, in the order requested
 (missing/deleted/non-Product ids are silently dropped).
+
+`ASPF_Shopify_Client::get_collections()` queries `collections(first, sortKey: TITLE)`,
+returning `{ gid, title, handle }` per collection (capped at 250, no pagination).
+
+`ASPF_Shopify_Client::search_products_in_collection()` queries
+`collection(id: $id) { products(first: 250) { ... } }` and filters by title
+client-side — see the collection-filter note above.
 
 `ASPF_Shopify_Client::get_product()` queries a single `product(id: $gid)` and returns
 title, handle, description/descriptionHtml, vendor, productType, tags,

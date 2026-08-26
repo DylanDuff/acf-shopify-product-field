@@ -63,6 +63,12 @@ API and store the selected product GID(s) as the field value.
   deleted Shopify product) — it just falls back to showing the raw GID as
   the label. Stale references silently persist until an editor manually
   removes them.
+- The multi-product field's "Restrict to Collection" setting does **not**
+  use the top-level `products(query:)` search DSL scoped to a collection —
+  the Storefront API's `Collection.products` connection has no title-search
+  argument. `search_products_in_collection()` fetches up to 250 products
+  from the collection and filters by title in PHP, so collections over 250
+  products only search their first page. No cursor pagination implemented.
 - GraphQL query shape lives inline in `class-shopify-client.php` as heredoc
   strings — there's no filter hook to extend the fields fetched. Edit the
   query directly (e.g. to add metafields).

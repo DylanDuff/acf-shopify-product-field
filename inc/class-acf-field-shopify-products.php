@@ -22,6 +22,7 @@ if (!class_exists('acf_field_shopify_products')) :
 			$this->defaults = array(
 				'placeholder' => '',
 				'max' => 0,
+				'collection_gid' => '',
 			);
 
 			parent::__construct();
@@ -42,6 +43,20 @@ if (!class_exists('acf_field_shopify_products')) :
 				'name' => 'max',
 				'min' => 0,
 			));
+
+			$choices = array('' => __('— All products —', 'acf-shopify-product-field'));
+			foreach (aspf_get_cached_collections() as $collection) {
+				$choices[$collection['gid']] = $collection['title'];
+			}
+
+			acf_render_field_setting($field, array(
+				'label' => __('Restrict to Collection', 'acf-shopify-product-field'),
+				'instructions' => __('Only allow selecting products from this collection. Requires Shopify credentials to be configured under Settings → Shopify Product Field.', 'acf-shopify-product-field'),
+				'type' => 'select',
+				'name' => 'collection_gid',
+				'choices' => $choices,
+				'allow_null' => false,
+			));
 		}
 
 		public function render_field($field) {
@@ -60,6 +75,7 @@ if (!class_exists('acf_field_shopify_products')) :
 							placeholder="<?php echo esc_attr($placeholder); ?>"
 							data-ajax-url="<?php echo esc_url(admin_url('admin-ajax.php')); ?>"
 							data-nonce="<?php echo esc_attr(wp_create_nonce('aspf_search_products')); ?>"
+							data-collection-gid="<?php echo esc_attr($field['collection_gid']); ?>"
 						/>
 						<ul class="aspf-products-results"></ul>
 					</div>

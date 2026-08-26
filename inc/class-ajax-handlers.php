@@ -28,13 +28,17 @@ class ASPF_Ajax_Handlers {
 
 		$search_term = isset($_GET['term']) ? sanitize_text_field(wp_unslash($_GET['term'])) : '';
 		$exclude = isset($_GET['exclude']) ? array_map('sanitize_text_field', (array) wp_unslash($_GET['exclude'])) : array();
+		$collection_gid = isset($_GET['collection']) ? sanitize_text_field(wp_unslash($_GET['collection'])) : '';
 
 		$client = ASPF_Shopify_Client::from_settings();
 		if (is_wp_error($client)) {
 			wp_send_json_error(array('message' => $client->get_error_message()), 400);
 		}
 
-		$results = $client->search_products($search_term);
+		$results = $collection_gid !== ''
+			? $client->search_products_in_collection($collection_gid, $search_term)
+			: $client->search_products($search_term);
+
 		if (is_wp_error($results)) {
 			wp_send_json_error(array('message' => $results->get_error_message()), 502);
 		}

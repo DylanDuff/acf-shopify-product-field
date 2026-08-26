@@ -171,6 +171,105 @@ GRAPHQL;
 	}
 
 	/**
+	 * List collections for the "Restrict to Collection" field setting.
+	 */
+	public function get_collections($limit = 250) {
+		$query = <<<'GRAPHQL'
+query GetCollections($first: Int!) {
+  collections(first: $first, sortKey: TITLE) {
+    edges {
+      node {
+        id
+        title
+        handle
+      }
+    }
+  }
+}
+GRAPHQL;
+
+		$data = $this->request($query, array('first' => max(1, min(250, (int) $limit))));
+		if (is_wp_error($data)) {
+			return $data;
+		}
+
+		$collections = array();
+		foreach ($data['collections']['edges'] ?? array() as $edge) {
+			$node = $edge['node'];
+			$collections[] = array(
+				'gid' => $node['id'],
+				'title' => $node['title'],
+				'handle' => $node['handle'],
+			);
+		}
+
+		return $collections;
+	}
+
+	/**
+	 * Search by product title within a single collection. The Storefront
+	 * API's Collection.products connection doesn't take a title-search
+	 * argument the way the top-level products() field does, so this fetches
+	 * up to 250 products from the collection and filters by title in PHP —
+	 * collections larger than 250 products only search their first page.
+	 */
+	public function search_products_in_collection($collection_gid, $search_term, $limit = 20) {
+		$query = <<<'GRAPHQL'
+query SearchCollectionProducts($id: ID!, $first: Int!) {
+  collection(id: $id) {
+    products(first: $first) {
+      edges {
+        node {
+          id
+          title
+          handle
+          featuredImage {
+            url(transform: { maxWidth: 64, maxHeight: 64 })
+          }
+        }
+      }
+    }
+  }
+}
+GRAPHQL;
+
+		$data = $this->request($query, array(
+			'id' => $collection_gid,
+			'first' => 250,
+		));
+
+		if (is_wp_error($data)) {
+			return $data;
+		}
+
+		if (empty($data['collection'])) {
+			return new WP_Error('aspf_collection_not_found', __('The configured Shopify collection could not be found.', 'acf-shopify-product-field'));
+		}
+
+		$search_term = trim((string) $search_term);
+		$limit = max(1, min(50, (int) $limit));
+		$results = array();
+
+		foreach ($data['collection']['products']['edges'] ?? array() as $edge) {
+			$node = $edge['node'];
+			if ($search_term !== '' && stripos($node['title'], $search_term) === false) {
+				continue;
+			}
+			$results[] = array(
+				'gid' => $node['id'],
+				'title' => $node['title'],
+				'handle' => $node['handle'],
+				'image' => $node['featuredImage']['url'] ?? '',
+			);
+			if (count($results) >= $limit) {
+				break;
+			}
+		}
+
+		return $results;
+	}
+
+	/**
 	 * Fetch full product data for a stored GID, e.g. gid://shopify/Product/1234567890.
 	 */
 	public function get_product($gid) {
