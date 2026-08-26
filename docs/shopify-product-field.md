@@ -77,21 +77,35 @@ list of selected products on the right
 settings: **Placeholder Text**, **Maximum Products** (0 = unlimited), and
 **Restrict to Collection**.
 
-**Restrict to Collection** locks the field instance's search to one Shopify
-collection, chosen from a `<select>` populated at field-settings-render time
-via `aspf_get_cached_collections()` → `ASPF_Shopify_Client::get_collections()`
-(a live Storefront API call — same trade-off as the settings page needing
-credentials configured first; if they aren't, the choices list is just empty
-and the setting shows only "— All products —"). When set, search requests
-pass the collection GID to `wp_ajax_aspf_search_products`, which routes to
-`ASPF_Shopify_Client::search_products_in_collection()` instead of the
-top-level `search_products()`. That method fetches up to 250 products from
-the collection and filters by title in PHP, because the Storefront API's
-`Collection.products` connection has no title-search argument the way the
-top-level `products(query:)` field does — **collections larger than 250
-products only search their first page**. Revisit this if a store has larger
-collections; the fix would be cursor-paginating through `Collection.products`
-server-side, which isn't implemented.
+There are two independent ways to scope search to a collection:
+
+1. **Restrict to Collection** (field setting, set by whoever builds the field
+   group) locks the field instance's search to one Shopify collection,
+   chosen from a `<select>` populated at field-settings-render time via
+   `aspf_get_cached_collections()` → `ASPF_Shopify_Client::get_collections()`
+   (a live Storefront API call — same trade-off as the settings page needing
+   credentials configured first; if they aren't, the choices list is empty
+   and the setting shows only "— All products —"). When set, the picker's
+   search input always carries this collection GID and no interactive
+   filter dropdown is rendered — the content editor can't broaden the
+   search back to the whole catalog.
+2. **Collection filter dropdown** (in the field's own UI, rendered above the
+   search box) is shown only when the field is *not* locked by the setting
+   above. It lets the content editor narrow their own search to a collection
+   on the fly, per search — selecting "All Collections" reverts to
+   catalog-wide search. Changing it re-runs the current search term
+   immediately if one is present.
+
+Either path passes a collection GID to `wp_ajax_aspf_search_products`, which
+routes to `ASPF_Shopify_Client::search_products_in_collection()` instead of
+the top-level `search_products()`. That method fetches up to 250 products
+from the collection and filters by title in PHP, because the Storefront
+API's `Collection.products` connection has no title-search argument the way
+the top-level `products(query:)` field does — **collections larger than 250
+products only search their first page**, regardless of which UI triggered
+the collection scoping. Revisit this if a store has larger collections; the
+fix would be cursor-paginating through `Collection.products` server-side,
+which isn't implemented.
 
 ### Storage
 

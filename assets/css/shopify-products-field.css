@@ -17,6 +17,12 @@
 	border-right: 1px solid #dcdcde;
 }
 
+.aspf-collection-filter {
+	width: 100%;
+	box-sizing: border-box;
+	margin-bottom: 6px;
+}
+
 .aspf-products-search {
 	width: 100%;
 	box-sizing: border-box;

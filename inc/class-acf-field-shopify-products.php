@@ -69,6 +69,18 @@ if (!class_exists('acf_field_shopify_products')) :
 				<input type="hidden" name="<?php echo esc_attr($field['name']); ?>" value="" />
 				<div class="aspf-relationship">
 					<div class="aspf-relationship-left">
+						<?php
+						$is_locked_to_collection = !empty($field['collection_gid']);
+						$collections = $is_locked_to_collection ? array() : aspf_get_cached_collections();
+						?>
+						<?php if (!empty($collections)) : ?>
+							<select class="aspf-collection-filter">
+								<option value=""><?php esc_html_e('All Collections', 'acf-shopify-product-field'); ?></option>
+								<?php foreach ($collections as $collection) : ?>
+									<option value="<?php echo esc_attr($collection['gid']); ?>"><?php echo esc_html($collection['title']); ?></option>
+								<?php endforeach; ?>
+							</select>
+						<?php endif; ?>
 						<input
 							type="text"
 							class="aspf-products-search"

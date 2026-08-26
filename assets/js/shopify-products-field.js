@@ -45,9 +45,14 @@
 		var $search = $wrap.find('.aspf-products-search');
 		var $results = $wrap.find('.aspf-products-results');
 		var $values = $wrap.find('.aspf-products-values');
+		var $collectionFilter = $wrap.find('.aspf-collection-filter');
 		var baseName = $wrap.children('input[type="hidden"]').attr('name');
 		var max = parseInt($values.data('max'), 10) || 0;
 		var searchTimer = null;
+
+		function activeCollectionGid() {
+			return $collectionFilter.length ? $collectionFilter.val() || '' : $search.data('collection-gid') || '';
+		}
 
 		$values.sortable({
 			items: '> li',
@@ -68,7 +73,7 @@
 					nonce: $search.data('nonce'),
 					term: term,
 					exclude: currentGids($values),
-					collection: $search.data('collection-gid') || '',
+					collection: activeCollectionGid(),
 				},
 			}).done(function (response) {
 				$results.empty();
@@ -91,6 +96,14 @@
 			searchTimer = setTimeout(function () {
 				runSearch(term);
 			}, 300);
+		});
+
+		$collectionFilter.on('change', function () {
+			var term = $search.val();
+			clearTimeout(searchTimer);
+			if (term.length >= 1) {
+				runSearch(term);
+			}
 		});
 
 		$results.on('click', '> li', function () {
