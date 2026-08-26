@@ -19,19 +19,29 @@
 
 .aspf-products-search-row {
 	display: flex;
+	align-items: center;
 	gap: 6px;
 	margin-bottom: 8px;
 }
 
-.aspf-products-search {
+/*
+ * ACF's own admin CSS sets `width: 100%` on `.acf-field input`/`select` with
+ * higher specificity than a bare class selector, which otherwise overrides
+ * flex-basis and breaks this row's sizing (the filter select claims full
+ * width via flex-shrink:0 while the search input gets crushed). The extra
+ * specificity + !important here is fighting that, not decoration.
+ */
+.aspf-products-search-row .aspf-products-search {
 	flex: 1 1 auto;
 	min-width: 0;
+	width: auto !important;
 	box-sizing: border-box;
 }
 
-.aspf-collection-filter {
+.aspf-products-search-row .aspf-collection-filter {
 	flex: 0 0 auto;
-	max-width: 40%;
+	width: auto !important;
+	max-width: 45%;
 	box-sizing: border-box;
 }
 
