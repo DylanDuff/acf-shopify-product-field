@@ -33,6 +33,7 @@ $aspfUpdateChecker->getVcsApi()->enableReleaseAssets();
 require_once ASPF_PLUGIN_DIR . 'inc/class-shopify-client.php';
 require_once ASPF_PLUGIN_DIR . 'inc/class-plugin-settings.php';
 require_once ASPF_PLUGIN_DIR . 'inc/class-ajax-handlers.php';
+require_once ASPF_PLUGIN_DIR . 'inc/bricks-dynamic-data.php';
 require_once ASPF_PLUGIN_DIR . 'inc/helpers.php';
 
 add_action('plugins_loaded', 'aspf_bootstrap');
