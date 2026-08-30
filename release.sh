@@ -29,7 +29,12 @@ if ! git diff-index --quiet HEAD -- 2>/dev/null; then
 fi
 
 echo "Bumping version to ${NEW_VERSION}..."
-sed -i '' -E "s/(Version:[[:space:]]*)[0-9]+\.[0-9]+\.[0-9]+/\1${NEW_VERSION}/" "$PLUGIN_FILE"
+sed -i '' -E "s/(Version:[[:space:]]*)[0-9]+(\.[0-9]+){1,2}/\1${NEW_VERSION}/" "$PLUGIN_FILE"
+
+if ! grep -q "Version: *${NEW_VERSION}" "$PLUGIN_FILE"; then
+	echo "Version bump failed -- ${PLUGIN_FILE} does not contain 'Version: ${NEW_VERSION}'." >&2
+	exit 1
+fi
 
 ZIP_NAME="${SLUG}.zip"
 STAGE_DIR="$(mktemp -d)/${SLUG}"
