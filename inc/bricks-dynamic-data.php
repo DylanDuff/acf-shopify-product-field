@@ -30,8 +30,13 @@ define('ASPF_BRICKS_TAG_GROUP', 'Shopify Products (ACF)');
 
 add_filter('bricks/dynamic_tags_list', 'aspf_bricks_register_tags');
 add_filter('bricks/dynamic_data/render_tag', 'aspf_bricks_render_tag', 20, 3);
-add_filter('bricks/dynamic_data/render_content', 'aspf_bricks_render_content', 20, 3);
-add_filter('bricks/frontend/render_data', 'aspf_bricks_render_content', 20, 2);
+// PHP_INT_MAX: aspf_bricks_render_content returns an array when the
+// loop-source tag resolves, and other plugins hooked on these same filters
+// (e.g. WPSR, BricksExtras) assume a string and fatal on strpos()/
+// preg_match_all() if they run after us. Running last means our array goes
+// straight back to Bricks instead of through anyone else's string logic.
+add_filter('bricks/dynamic_data/render_content', 'aspf_bricks_render_content', PHP_INT_MAX, 3);
+add_filter('bricks/frontend/render_data', 'aspf_bricks_render_content', PHP_INT_MAX, 2);
 
 /**
  * Loop-item tag => product summary key.
