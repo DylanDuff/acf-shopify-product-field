@@ -131,7 +131,7 @@ function aspf_get_products_field($selector, $post_id = null) {
  * label if a product can't be resolved (e.g. it was deleted in Shopify).
  *
  * @param array $gids
- * @return array List of ['gid' => ..., 'title' => ..., 'handle' => ..., 'image' => ...], one per input GID, in order.
+ * @return array List of ['gid' => ..., 'title' => ..., 'handle' => ..., 'image' => ..., 'vendor' => ..., 'price' => ..., 'currency' => ...], one per input GID, in order.
  */
 function aspf_get_cached_products_summary($gids) {
 	static $cache = array();
@@ -159,6 +159,9 @@ function aspf_get_cached_products_summary($gids) {
 			'title' => $gid,
 			'handle' => '',
 			'image' => '',
+			'vendor' => '',
+			'price' => '',
+			'currency' => '',
 		);
 	}
 

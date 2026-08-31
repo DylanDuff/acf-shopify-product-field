@@ -14,6 +14,26 @@ The Storefront API token only needs `unauthenticated_read_product_listings` scop
 Storefront tokens are meant for public/unauthenticated reads, so storing it in
 `wp_options` carries the same trust level as embedding it in a theme.
 
+## Caching (shared by both field types)
+
+Product lookups — `ASPF_Shopify_Client::get_product()` and `get_products()`,
+and everything built on them (`aspf_get_product()`, `aspf_get_products()`,
+`aspf_get_product_field()`, `aspf_get_products_field()`, the admin edit-screen
+labels, the Bricks loop) — are cached as WP transients, keyed per GID, for
+`ASPF_Shopify_Client::DEFAULT_CACHE_TTL` (15 minutes) by default. Adjust with:
+
+```php
+add_filter('aspf_product_cache_ttl', function () {
+    return HOUR_IN_SECONDS;
+});
+```
+
+Only successful lookups are cached — a not-found/deleted GID is retried on
+every call rather than caching the miss for the TTL window. Live search
+(`search_products()`, `search_products_in_collection()`, backing the
+type-ahead pickers) and `get_collections()` are **not** cached; only the two
+product-lookup methods are.
+
 ## `shopify_product` — single product
 
 `inc/class-acf-field-shopify-product.php`.
@@ -47,9 +67,7 @@ $product = aspf_get_product('gid://shopify/Product/1234567890');
 ```
 
 Both helpers live in `inc/helpers.php` and call `ASPF_Shopify_Client::get_product()`,
-which is a live Storefront API GraphQL call on every invocation — there is no
-caching layer. If a template calls this on every page load, consider wrapping it
-in a transient.
+which is transient-cached — see the Caching section above.
 
 ### Admin UI notes
 
@@ -58,9 +76,11 @@ in a transient.
   `append_field/...` for repeater/flexible-content rows), not on raw DOM ready —
   this is required for the field to work inside repeaters and clone fields.
 - The currently-selected option's label is looked up server-side on render
-  (`aspf_get_cached_product_label()`), which makes one Storefront API call per
-  distinct GID per page load (memoized within the request). A post edit screen
-  with many rows of this field will make that many API calls when the page renders.
+  (`aspf_get_cached_product_label()`), which is request-memoized on top of
+  `get_product()`'s transient cache — so a distinct GID costs a live API
+  call only on the first page load after its cache expires (or on the first
+  render of a given GID within a request, either way); after that it's a
+  transient hit until the TTL lapses.
 
 ## `shopify_products` — multiple products
 
@@ -122,7 +142,7 @@ postmeta serialization handles the array.
 
 ```php
 $products = aspf_get_products_field('linked_products'); // current post, by field name
-// => [ ['gid' => ..., 'title' => ..., 'handle' => ..., 'image' => ...], ... ] in stored order
+// => [ ['gid' => ..., 'title' => ..., 'handle' => ..., 'image' => ..., 'vendor' => ..., 'price' => ..., 'currency' => ...], ... ] in stored order
 
 foreach ($products as $product) {
     echo esc_html($product['title']);
@@ -132,11 +152,14 @@ foreach ($products as $product) {
 $products = aspf_get_products(['gid://shopify/Product/1', 'gid://shopify/Product/2']);
 ```
 
-`aspf_get_products()` calls `ASPF_Shopify_Client::get_products()`, which uses
-Shopify's `nodes(ids: [ID!])` query to fetch all of them in a single
-Storefront API request (not one call per GID). It returns lightweight
-summaries only (gid, title, handle, image) — not the full product shape
-`get_product()`/`aspf_get_product()` returns (no variants, price range,
+`aspf_get_products()` calls `ASPF_Shopify_Client::get_products()`, which
+checks the transient cache per GID first (see the Caching section above),
+then fetches only the cache misses via Shopify's `nodes(ids: [ID!])` query in
+a single Storefront API request (not one call per GID). It returns
+lightweight summaries only (gid, title, handle, image, vendor,
+price, currency) — `price` is the product's `minVariantPrice` (its "from"
+price, not per-variant pricing) — not the full product shape
+`get_product()`/`aspf_get_product()` returns (no variants, full price range,
 description, etc.). Call `aspf_get_product($gid)` per item if you need the
 full shape for one of the selected products.
 

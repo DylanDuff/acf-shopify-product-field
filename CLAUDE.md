@@ -14,7 +14,11 @@ API and store the selected product GID(s) as the field value.
   version). `from_settings()` builds an instance from the global option;
   bump `API_VERSION` here when Shopify deprecates the current one.
   `get_products()` uses a single `nodes(ids:)` query for bulk lookups —
-  prefer it over calling `get_product()` in a loop.
+  prefer it over calling `get_product()` in a loop. `get_product()` and
+  `get_products()` are transient-cached per GID (15 min default, filterable
+  via `aspf_product_cache_ttl`) — `search_products()` and
+  `search_products_in_collection()` are not cached, since they're live
+  type-ahead search.
 - `inc/class-plugin-settings.php` — Settings → Shopify Product Field. One
   global `aspf_settings` option (`shop_domain`, `storefront_token`) — no
   per-field-group credential override by design, shared by both field types.
@@ -46,16 +50,21 @@ API and store the selected product GID(s) as the field value.
 ## Non-obvious behavior
 
 - Both fields store **only GID string(s)** — no title/image is persisted to
-  postmeta. Every read of product data (including the admin edit-screen
-  label for already-selected products) is a live Storefront API call. The
-  single field makes one call per distinct GID per page load
-  (request-memoized); the multi-product field batches all of a page's
-  missing GIDs into one `nodes()` call instead, so it scales better per
-  field instance — but a post edit screen with many *instances* of either
-  field type still makes that many calls. There is no object-cache/transient
-  layer. If this becomes a problem, add caching in
-  `aspf_get_cached_product_label()` / `aspf_get_cached_products_summary()`
-  and the corresponding `ASPF_Shopify_Client` methods, not at the call sites.
+  postmeta. Product data reads (`get_product()`/`get_products()`, and
+  everything built on them: `aspf_get_product_field()`,
+  `aspf_get_products_field()`, the admin edit-screen labels, the Bricks
+  loop) are transient-cached per GID, 15 minutes by default
+  (`ASPF_Shopify_Client::DEFAULT_CACHE_TTL`, filterable via
+  `aspf_product_cache_ttl`). The `aspf_get_cached_*` helpers in
+  `helpers.php` are a *separate*, request-only memoization layer on top of
+  that (dedupes repeat lookups of the same GID within one page load); the
+  transient cache is what actually survives between requests. Search
+  (`search_products()`, `search_products_in_collection()`) is intentionally
+  never cached — it's live type-ahead, staleness there would just be
+  confusing. A page/screen with many *distinct* uncached GIDs still costs
+  one API round trip (get_product()) or one batched round trip
+  (get_products()) the first time; after that it's transient hits until TTL
+  expiry.
 - Credentials are global, not per-field. If a site ever needs to query
   multiple shops, `ASPF_Shopify_Client::from_settings()` and both field
   settings UIs would need to change together.

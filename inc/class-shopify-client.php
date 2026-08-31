@@ -16,12 +16,32 @@ class ASPF_Shopify_Client {
 
 	const API_VERSION = '2024-10';
 
+	/**
+	 * Default transient TTL for cached product lookups (get_product() and
+	 * get_products()). Filterable with `aspf_product_cache_ttl` since how
+	 * stale price/availability data is acceptable varies per site.
+	 */
+	const DEFAULT_CACHE_TTL = 15 * MINUTE_IN_SECONDS;
+
 	private $shop_domain;
 	private $storefront_token;
 
 	public function __construct($shop_domain, $storefront_token) {
 		$this->shop_domain = $shop_domain;
 		$this->storefront_token = $storefront_token;
+	}
+
+	/**
+	 * Transient key for a single product's cached data. Namespaced by
+	 * $variant ('full' for get_product(), 'summary' for get_products()) so
+	 * the two different shapes never collide under the same key.
+	 */
+	private function product_cache_key($variant, $gid) {
+		return 'aspf_product_' . $variant . '_' . md5($this->shop_domain . '|' . $gid);
+	}
+
+	private function cache_ttl() {
+		return (int) apply_filters('aspf_product_cache_ttl', self::DEFAULT_CACHE_TTL);
 	}
 
 	public static function from_settings() {
@@ -120,10 +140,22 @@ GRAPHQL;
 	}
 
 	/**
-	 * Bulk-fetch lightweight summaries (gid, title, handle, image) for a list of
-	 * GIDs in a single request, preserving the order of $gids. Used by the
-	 * multi-select "Shopify Products" field to label already-selected items
-	 * without one API call per product.
+	 * Bulk-fetch lightweight summaries (gid, title, handle, image, vendor,
+	 * price, currency) for a list of GIDs in a single request, preserving
+	 * the order of $gids. Used by the multi-select "Shopify Products" field
+	 * to label already-selected items, and by the Bricks loop tags, without
+	 * one API call per product. `price` is the product's minVariantPrice
+	 * (i.e. its "from" price) -- not per-variant pricing. `image` is a
+	 * 600x600 transform, sized for front-end display (the Bricks loop);
+	 * it's also what the admin picker's small selected-item thumbnails use,
+	 * which is more bytes than they need but not worth a second query
+	 * variant for.
+	 *
+	 * Each product is cached individually (transient, 15 min default, see
+	 * DEFAULT_CACHE_TTL / `aspf_product_cache_ttl`), keyed by GID -- not by
+	 * the requested $gids list -- so a cache hit for one GID is reused
+	 * across any other call that happens to include it, and only the
+	 * cache-miss GIDs are sent in the bulk nodes() request.
 	 */
 	public function get_products($gids) {
 		$gids = array_values(array_unique(array_filter((array) $gids)));
@@ -131,37 +163,64 @@ GRAPHQL;
 			return array();
 		}
 
-		$query = <<<'GRAPHQL'
+		$by_id = array();
+		$missing = array();
+
+		foreach ($gids as $gid) {
+			$cached = get_transient($this->product_cache_key('summary', $gid));
+			if ($cached !== false) {
+				$by_id[$gid] = $cached;
+			} else {
+				$missing[] = $gid;
+			}
+		}
+
+		if (!empty($missing)) {
+			$query = <<<'GRAPHQL'
 query GetProducts($ids: [ID!]!) {
   nodes(ids: $ids) {
     id
     ... on Product {
       title
       handle
+      vendor
       featuredImage {
-        url(transform: { maxWidth: 64, maxHeight: 64 })
+        url(transform: { maxWidth: 600, maxHeight: 600 })
+      }
+      priceRange {
+        minVariantPrice {
+          amount
+          currencyCode
+        }
       }
     }
   }
 }
 GRAPHQL;
 
-		$data = $this->request($query, array('ids' => $gids));
-		if (is_wp_error($data)) {
-			return $data;
-		}
-
-		$by_id = array();
-		foreach ($data['nodes'] ?? array() as $node) {
-			if (empty($node) || !isset($node['title'])) {
-				continue;
+			$data = $this->request($query, array('ids' => $missing));
+			if (is_wp_error($data)) {
+				return $data;
 			}
-			$by_id[$node['id']] = array(
-				'gid' => $node['id'],
-				'title' => $node['title'],
-				'handle' => $node['handle'] ?? '',
-				'image' => $node['featuredImage']['url'] ?? '',
-			);
+
+			$ttl = $this->cache_ttl();
+
+			foreach ($data['nodes'] ?? array() as $node) {
+				if (empty($node) || !isset($node['title'])) {
+					continue;
+				}
+				$product = array(
+					'gid' => $node['id'],
+					'title' => $node['title'],
+					'handle' => $node['handle'] ?? '',
+					'image' => $node['featuredImage']['url'] ?? '',
+					'vendor' => $node['vendor'] ?? '',
+					'price' => $node['priceRange']['minVariantPrice']['amount'] ?? '',
+					'currency' => $node['priceRange']['minVariantPrice']['currencyCode'] ?? '',
+				);
+				$by_id[$node['id']] = $product;
+				set_transient($this->product_cache_key('summary', $node['id']), $product, $ttl);
+			}
 		}
 
 		$ordered = array();
@@ -275,8 +334,22 @@ GRAPHQL;
 
 	/**
 	 * Fetch full product data for a stored GID, e.g. gid://shopify/Product/1234567890.
+	 * Cached as a transient (15 min default, see DEFAULT_CACHE_TTL /
+	 * `aspf_product_cache_ttl`) -- only successful lookups are cached, so a
+	 * deleted/not-found GID is retried on every call rather than caching
+	 * the miss.
 	 */
 	public function get_product($gid) {
+		if (empty($gid)) {
+			return new WP_Error('aspf_missing_gid', __('No Shopify product GID provided.', 'acf-shopify-product-field'));
+		}
+
+		$cache_key = $this->product_cache_key('full', $gid);
+		$cached = get_transient($cache_key);
+		if ($cached !== false) {
+			return $cached;
+		}
+
 		$query = <<<'GRAPHQL'
 query GetProduct($id: ID!) {
   product(id: $id) {
@@ -334,10 +407,6 @@ query GetProduct($id: ID!) {
 }
 GRAPHQL;
 
-		if (empty($gid)) {
-			return new WP_Error('aspf_missing_gid', __('No Shopify product GID provided.', 'acf-shopify-product-field'));
-		}
-
 		$data = $this->request($query, array('id' => $gid));
 
 		if (is_wp_error($data)) {
@@ -347,6 +416,8 @@ GRAPHQL;
 		if (empty($data['product'])) {
 			return new WP_Error('aspf_not_found', __('No Shopify product found for the stored GID.', 'acf-shopify-product-field'));
 		}
+
+		set_transient($cache_key, $data['product'], $this->cache_ttl());
 
 		return $data['product'];
 	}

@@ -11,9 +11,14 @@ if (!defined('ABSPATH')) {
  *
  *   {shopify_products:FIELD_NAME}
  *
- * Returns the field's product summaries as an array, one loop item per
- * product, in the field's stored order. FIELD_NAME is the ACF field name
- * (or field key).
+ * Resolves to a JSON-encoded array of the field's product summaries, one
+ * loop item per product, in the field's stored order -- Bricks' "Array"
+ * query type json_decode()s whatever the tag resolves to, so this must be a
+ * JSON string, not a raw PHP array (see
+ * https://academy.bricksbuilder.io/article/query-loop/#array). FIELD_NAME
+ * is the ACF field name (or field key). Works whether FIELD_NAME is set on
+ * the current post or on an ACF Options Page -- see
+ * aspf_bricks_get_source_array()'s fallback order.
  *
  * Tags for use on elements inside that loop:
  *
@@ -21,6 +26,9 @@ if (!defined('ABSPATH')) {
  *   {shopify_product_image}   (returns an image URL; array in image contexts)
  *   {shopify_product_handle}
  *   {shopify_product_gid}
+ *   {shopify_product_vendor}
+ *   {shopify_product_price}     (the product's "from" price -- minVariantPrice.amount)
+ *   {shopify_product_currency}
  *
  * Each reads the matching key from the current Bricks loop object.
  */
@@ -47,6 +55,9 @@ function aspf_bricks_loop_tags() {
 		'shopify_product_image' => array('key' => 'image', 'label' => 'Shopify Product Image'),
 		'shopify_product_handle' => array('key' => 'handle', 'label' => 'Shopify Product Handle'),
 		'shopify_product_gid' => array('key' => 'gid', 'label' => 'Shopify Product GID'),
+		'shopify_product_vendor' => array('key' => 'vendor', 'label' => 'Shopify Product Vendor'),
+		'shopify_product_price' => array('key' => 'price', 'label' => 'Shopify Product Price'),
+		'shopify_product_currency' => array('key' => 'currency', 'label' => 'Shopify Product Currency'),
 	);
 }
 
@@ -85,7 +96,19 @@ function aspf_bricks_register_tags($tags) {
  * The array of product summaries for a loop-source tag.
  */
 function aspf_bricks_get_source_array($field_name) {
-	$products = aspf_get_products_field($field_name, get_the_ID());
+	// The field could be set on the current post or on an ACF Options Page --
+	// try the current post first (the common case for a per-post field), and
+	// fall back to 'option' if that's empty. Note: a per-post field that's
+	// genuinely and intentionally empty on this post will fall through to
+	// showing an Options Page value under the same field name, if one
+	// exists -- an acceptable trade-off for not requiring the field's
+	// location to be configured anywhere.
+	$post_id = get_the_ID();
+	$products = $post_id ? aspf_get_products_field($field_name, $post_id) : array();
+
+	if (is_wp_error($products) || empty($products)) {
+		$products = aspf_get_products_field($field_name, 'option');
+	}
 
 	if (is_wp_error($products) || !is_array($products)) {
 		return array();
@@ -118,10 +141,14 @@ function aspf_bricks_render_tag($tag, $post, $context = 'text') {
 
 	$clean_tag = str_replace(array('{', '}'), '', $tag);
 
-	// Loop source: {shopify_products:FIELD_NAME} returns the raw array.
+	// Loop source: {shopify_products:FIELD_NAME}. Bricks' "Array" query type
+	// json_decode()s whatever this tag resolves to (see
+	// https://academy.bricksbuilder.io/article/query-loop/#array) -- it does
+	// not accept a raw PHP array back from a dynamic tag, so this must
+	// return a JSON string, not aspf_bricks_get_source_array()'s array.
 	if (strpos($clean_tag, ASPF_BRICKS_SOURCE_TAG . ':') === 0) {
 		$field_name = substr($clean_tag, strlen(ASPF_BRICKS_SOURCE_TAG) + 1);
-		return aspf_bricks_get_source_array($field_name);
+		return wp_json_encode(aspf_bricks_get_source_array($field_name));
 	}
 
 	// Loop item tags.
@@ -149,10 +176,11 @@ function aspf_bricks_render_content($content, $post, $context = 'text') {
 		return $content;
 	}
 
-	// Loop source tag used on its own: hand the array straight back to Bricks.
+	// Loop source tag used on its own: same JSON-string requirement as
+	// aspf_bricks_render_tag() above -- Bricks' Array query type decodes it.
 	if (strpos($content, '{' . ASPF_BRICKS_SOURCE_TAG . ':') !== false) {
 		if (preg_match('/^\s*{' . ASPF_BRICKS_SOURCE_TAG . ':([^}]+)}\s*$/', $content, $m)) {
-			return aspf_bricks_get_source_array($m[1]);
+			return wp_json_encode(aspf_bricks_get_source_array($m[1]));
 		}
 	}
 
